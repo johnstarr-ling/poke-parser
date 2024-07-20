@@ -21,3 +21,11 @@ for line in raw_html.split('\n')[:2]:
     player_team_dict[line.split('|')[3]] = {}
 
 print(player_team_dict)
+
+
+##### THINGS TO ADD ###### 
+# Most frequent chatter & how many messages they sent
+# Most & least damage giver (how much percent they gave out)
+# Most & least damage taker (how much percent they took)
+# Biggest healer (account for healing wish and wish?)
+#
