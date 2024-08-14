@@ -295,12 +295,13 @@ def get_buff(line_buff, set_boost):
 
     return pokemon, int(buff)
 
-def make_match_dataframe(mons2idx, stats2idx, mon_array, week):
+def make_match_dataframe(mons2idx, stats2idx, mon_array, week,mons2player):
     df = pd.DataFrame(mon_array, 
                       index=mons2idx.keys(), 
                       columns=stats2idx.keys())
-
+    df = df.reset_index()
     df['week'] = week
+    df['trainer'] = df['index'].apply(lambda x: mons2player[x])
     return df
 
 
@@ -340,6 +341,12 @@ def parse_html(base_array, match_dict, match_html, week):
     # Making a dictionary that keeps track of current health for all mons in match
     health_dict = {name:100 for name in mons2idx.keys()}
     
+    # Making a dictionary that maps Pokemon to players:
+    p1_mons2player = {mon:match_dict['p1']['name'] for mon in p1_mons}
+    p2_mons2player = {mon:match_dict['p2']['name'] for mon in p2_mons}
+    
+    mons2player = p1_mons2player | p2_mons2player
+
     # Going through html
     for line in match_html:
         
@@ -435,7 +442,7 @@ def parse_html(base_array, match_dict, match_html, week):
         if line.startswith('|c|'):
             add_chat(line)
         
-    return make_match_dataframe(mons2idx, stats2idx, mon_array, week)
+    return make_match_dataframe(mons2idx, stats2idx, mon_array, week, mons2player)
 
 
 # print(parse_html(base_array, test_dict, test_html))
