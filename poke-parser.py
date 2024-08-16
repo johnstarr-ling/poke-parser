@@ -16,12 +16,6 @@ parser.add_argument('path', metavar='PATH',
 parser.add_argument('-w', '--weeks', action='store_true',
                    help='Process files in weeks; assumes PATH location is a directory of directories.')
 
-parser.add_argument('-ao', '--agg_out', action='store_true',
-                    help='Generate only aggregate output.')
-
-parser.add_argument('-wo', '--week_out', action='store_true',
-                    help='Generate only weekly output.')
-
 args = parser.parse_args()
 
 HOME = os.getcwd()
@@ -59,14 +53,11 @@ category_list = ['chat_num', 'chat_len', 'joined', 'male_mons', 'female_mons', '
 categories = {value[1]:value[0] for value in enumerate(category_list)}
 
 num_players = len(players) 
-num_weeks = 1 
+num_categories = len(categories)
 
-if WEEKLY:
-    num_weeks = len(weeks) # Re-assigning the number of weeks
+base_array = np.zeros((num_players, num_categories))
 
-base_array = np.zeros((num_players, len(list(categories))))
-
-# Creating a dictionary which maps players to a unique index; can be used for base_array:
+# Creating a dictionary which maps players to a unique index; can be used for finding things in base_array:
 idx_2_player = {item[0]:item[1] for item in enumerate(sorted(players))}
 player_2_idx = {item[1]:item[0] for item in idx_2_player.items()}
 
@@ -114,6 +105,7 @@ def get_pokemon(line_pokemon):
 def get_nickname(line_switch, name_dict):
     """
     line_switch (str) -> Line indicated that a Pokemon switched in of format |switch|p#: NICKNAME|NAME(, GENDER)|HEALTH
+    name_dict (dict) -> Dictionary that maps a Pokemon's nickname to their standard name
     """
     nickname, name = line_switch.split('|')[2:4]
     nickname = ' '.join(nickname.split()[1:]) # Keeping everything after p#:
@@ -143,16 +135,13 @@ def clean_html(filename):
         player_id, player_map_dict = get_player_names(line_player_name)
         player_dict.update(player_map_dict)
         player_dict[player_id] = {'name':player_map_dict[player_id],
-                                  'pokemon':set(),
-                                  'genders':{'Male':0, 'Female':0, 'NONE':0},
-                                  'status':{},
-                                  'hazards':set(),
-                                  'healer':{}}
+                                  'pokemon':set()}
+    
     # Removing rules and stripping whitespace:
     html_cleaned = [line.strip() for line in html_cleaned[17:] if line != '|\n']
     
 
-    # Adding Pokemon
+    # Adding Pokemon to teams and their names
     for line in html_cleaned[:12]: # Assumes that all teams have 6 pokemon
         player_id, pokemon_name, pokemon_gender = get_pokemon(line)
         player_dict[player_id]['pokemon'].add(pokemon_name)
@@ -195,21 +184,7 @@ def clean_html(filename):
 
 
 
-# test_dict, test_html = clean_html('Gen6Draft-2024-06-10-notabot1234-kaisercauto.html')
-
-
-
-
 # ----- PARSING STATISTICS ----- # 
-
-# def add_join(line_join, base_array=base_array, week=0):
-  #  """
-  #  base_array (arr) -> Statistics array
-  #  line_join (str) -> Line indicating that someone joined of format |j| NAME
-  #  """
-  #  name = ''.join(line_join.split('|j| ')[1].strip().lower().split()).replace('☆', '').replace('_', '')
-  #  if name in player_2_idx:
-  #      base_array[player_2_idx[name], categories['joined']] += 1  # Tracks who joined the most
 
 def add_chat(line_chat, base_array=base_array, week=0):
     """
@@ -227,6 +202,7 @@ def add_chat(line_chat, base_array=base_array, week=0):
 def get_main_damage(line_attack, health_dict):
     """
     line_attack (str) -> Line indicating attack damage of format |move|p#: ATTACKER|MOVE|TARGET |-MARKERS|...|-damage|p#: TARGET|health
+    health_dict (dict) -> Dictionary that maps Pokemon to their current health
     """
     
     # Finding who the attacker and targets are 
@@ -280,7 +256,8 @@ def get_health_change(line_change, health_dict):
 
 def get_buff(line_buff, set_boost):
     """
-    line_buff (str) -> line of format |-boost|p#: MON|stat|#boost
+    line_buff (str) -> Line of format |-boost|p#: MON|stat|#boost
+    set_boost (str) -> String that determines type of boost
     """
 
     line_buff_split = line_buff.split('|')
@@ -296,17 +273,29 @@ def get_buff(line_buff, set_boost):
     return pokemon, int(buff)
 
 def make_match_dataframe(mons2idx, stats2idx, mon_array, week,mons2player):
+    """
+    mons2idx (dict) -> Dictionary that maps Pokemon in match to a unique index 
+    stats2idx (dict) -> Dictionary that maps statistic to index
+    mon_array (arr) -> Array that maps pokemon to statistics
+    mons2player (dict) -> Dictionary that maps Pokemon to each player in match
+    """
     df = pd.DataFrame(mon_array, 
                       index=mons2idx.keys(), 
                       columns=stats2idx.keys())
     df = df.reset_index()
     df['week'] = week
     df['trainer'] = df['index'].apply(lambda x: mons2player[x])
+    
     return df
 
 
 def parse_html(base_array, match_dict, match_html, week):
-
+    """
+    base_arry (arr) -> Array that maps players to various statistics
+    match_dict (dict) -> Dictionary that maps players to their UN and their Pokemon
+    match_html (list) -> List of lines from the match, in sequential order
+    week (int) -> Week number
+    """ 
     # Choosing the stats we want to track
     tracked_stats = ['damage_given',
                      'damage_received',
@@ -323,12 +312,6 @@ def parse_html(base_array, match_dict, match_html, week):
     
     stats2idx = {item[1]:item[0] for item in enumerate(tracked_stats)}
     
-    # Creating arrays for each player and their team that we can update later
-    # p1_mons2idx = {item[1]:item[0] for item in enumerate(match_dict['p1']['pokemon'])}
-    # p2_mons2idx = {item[1]:item[0] for item in enumerate(match_dict['p2']['pokemon'])}
-    # p1_match_array = np.zeros((len(p1_mons2idx), len(stats2idx)))
-    # p2_match_array = np.zeros((len(p2_mons2idx), len(stats2idx)))
-    
     # Making a dictionary that gives unique index to each mon in match
     p1_mons = [mon for mon in match_dict['p1']['pokemon']]
     p2_mons = [mon for mon in match_dict['p2']['pokemon']]
@@ -344,19 +327,17 @@ def parse_html(base_array, match_dict, match_html, week):
     # Making a dictionary that maps Pokemon to players:
     p1_mons2player = {mon:match_dict['p1']['name'] for mon in p1_mons}
     p2_mons2player = {mon:match_dict['p2']['name'] for mon in p2_mons}
-    
-    mons2player = p1_mons2player | p2_mons2player
+    mons2player = p1_mons2player | p2_mons2player # Joins dictionaries for each player together
 
     # Going through html
     for line in match_html:
-        
-       
 
         # -- POKEMON STATISTICS -- #
         ### To avoid all the if/elif statements, it'd probably be easier to have 
         ### some kind of map or dict that maps condition. I'm lazy for now -- will update later!
         
         type_change = ''
+
         # Boosting
         if 'boost|' in line:
             if 'setboost' in line:
@@ -423,7 +404,8 @@ def parse_html(base_array, match_dict, match_html, week):
         # Doing main damage case after 
         if type_change:
             mon_array[mons2idx[pokemon], stats2idx[type_change]] += change 
-
+        
+        # Checking damage lines
         if '&&&' in line and '|move|' in line: 
             attacker, target = get_main_damage(line, health_dict)
             
@@ -434,7 +416,6 @@ def parse_html(base_array, match_dict, match_html, week):
             mon_array[mons2idx[target[0]], stats2idx['damage_received']] += target[1]
         
         # -- PLAYER STATISTICS -- #
-        
         if line.startswith('|j|'):
             # add_join(line)
             pass    
@@ -465,26 +446,20 @@ if WEEKLY:
     name = 'pokemon_stats_weekly.csv'
 else:
     for file in os.listdir(PATH):
+       print(f'Processing {file}')
        file_dict, file_html = clean_html(file)
        output_df = parse_html(base_array, file_dict, file_html, 0)
        final_df = pd.concat([final_df, output_df])
-    name = 'pokemon_stats.csv'
+    name = 'pokemon_stats_batch.csv'
 final_df.to_csv(f'{HOME}/csvs/{name}')
 
-# -- PLAYER CSV -- #
+# ----- AGGREGATING PLAYER STATS ----- #
 player_df = pd.DataFrame(base_array,
                          index=player_2_idx,
                          columns=categories)
 player_df['average_chat_len'] = player_df['chat_len']/player_df['chat_num']
-player_df.to_csv(f'{HOME}/csvs/player_stats.csv')
+if WEEKLY:
+    player_df.to_csv(f'{HOME}/csvs/player_stats_weekly.csv')
+else:
+    player_df.to_csv(f'{HOME}/csvs/player_stats_batch.csv')
 
-##### THINGS TO ADD ###### 
-# Most & least damage giver (how much percent they gave out)
-# Most & least damage taker (how much percent they took)
-# Biggest healer (account for healing wish and wish?)
-# Pokemon gender users (most feminist)
-# Most popular items ?
-# Most improved (aka stat buffs)
-# Most toxic damage giver/damage?
-# Hurts itself the most (life orb, etc.)
-# Most crits
