@@ -22,11 +22,10 @@ This repository assumes that you have Python >= 3.10 installed. To download Pyth
 
 You will also need to install the `pandas` and `numpy` Python packages. Documentation for each can be found [here](https://pandas.pydata.org/) and [here](https://numpy.org/), respectively. To install `numpy` and `pandas` onto your machine, run the following code in your preferred terminal:
 
-```
-```
-pip install numpy pandas
-```
-```
+
+```pip install numpy pandas```
+
+
 I traditionally develop my code in a [Conda virtual environment](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html) using `miniconda`. If you are anticipating using different versions of Python/`numpy`/`pandas` for other projects, I'd encourage you to do the same!
 
 ## USE
